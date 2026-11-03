@@ -22,20 +22,29 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     min-height: 100vh; padding: 16px; touch-action: manipulation; user-select: none;
   }
-  h1 { margin: 0 0 12px; font-size: 28px; letter-spacing: 4px; color: var(--accent); }
+  h1 { margin: 0 0 4px; font-size: 28px; letter-spacing: 4px; color: var(--accent); }
+  .tagline { margin: 0 0 12px; font-size: 12px; letter-spacing: 3px; color: var(--muted); }
   .game { display: flex; gap: 16px; align-items: flex-start; }
-  .side { display: flex; flex-direction: column; gap: 12px; width: 110px; }
+  .side { display: flex; flex-direction: column; gap: 12px; width: 120px; }
   .box {
     background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
     padding: 10px; text-align: center;
   }
   .box .label { font-size: 11px; letter-spacing: 2px; color: var(--muted); margin-bottom: 6px; }
   .box .value { font-size: 20px; font-weight: 700; }
+  .names { font-size: 10px; color: var(--muted); line-height: 1.4; margin-top: 4px; }
   #board {
     background: #0a0b18; border: 2px solid var(--line); border-radius: 8px;
     display: block; max-height: 75vh; width: auto; height: min(75vh, 600px);
   }
   .wrap { position: relative; }
+  #now {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    height: 28px; margin-bottom: 8px; font-size: 15px; font-weight: 700;
+  }
+  #now img { height: 18px; border-radius: 3px; box-shadow: 0 0 0 1px rgba(255,255,255,0.2); }
+  #now.pop { animation: pop 0.35s ease-out; }
+  @keyframes pop { from { transform: scale(1.25); opacity: 0.3; } to { transform: scale(1); opacity: 1; } }
   #overlay {
     position: absolute; inset: 0; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 12px; text-align: center;
@@ -58,28 +67,34 @@
     .side { width: 80px; }
     .game { gap: 8px; }
     #board { height: min(60vh, 520px); }
+    .names { display: none; }
   }
 </style>
 </head>
 <body>
 <h1>BLOCKFALL</h1>
+<p class="tagline">EVERY PIECE IS A NATION</p>
 <div class="game">
   <div class="side">
-    <div class="box"><div class="label">HOLD</div><canvas id="hold" width="80" height="80"></canvas></div>
+    <div class="box"><div class="label">HOLD</div><canvas id="hold" width="80" height="80"></canvas><div class="names" id="hold-name"></div></div>
     <div class="box"><div class="label">SCORE</div><div class="value" id="score">0</div></div>
     <div class="box"><div class="label">LINES</div><div class="value" id="lines">0</div></div>
     <div class="box"><div class="label">LEVEL</div><div class="value" id="level">1</div></div>
+    <div class="box"><div class="label">FLAGS</div><div class="value" id="flags">0</div></div>
   </div>
-  <div class="wrap">
-    <canvas id="board" width="300" height="600"></canvas>
-    <div id="overlay">
-      <h2 id="ov-title">BLOCKFALL</h2>
-      <p id="ov-text">Stack the blocks. Clear the rows.</p>
-      <button id="start">Play</button>
+  <div>
+    <div id="now">&nbsp;</div>
+    <div class="wrap">
+      <canvas id="board" width="300" height="600"></canvas>
+      <div id="overlay">
+        <h2 id="ov-title">BLOCKFALL</h2>
+        <p id="ov-text">Every piece is a different country's flag.<br>Stack them. Clear the rows.</p>
+        <button id="start">Play</button>
+      </div>
     </div>
   </div>
   <div class="side">
-    <div class="box"><div class="label">NEXT</div><canvas id="next" width="80" height="240"></canvas></div>
+    <div class="box"><div class="label">NEXT</div><canvas id="next" width="80" height="240"></canvas><div class="names" id="next-names"></div></div>
     <div class="box"><div class="label">BEST</div><div class="value" id="best">0</div></div>
     <div class="box keys-box"><div class="keys">
       <b>← →</b> move<br><b>↑ / X</b> rotate<br><b>Z</b> rotate back<br>
@@ -103,7 +118,7 @@ const ctx = board.getContext('2d');
 const holdCtx = document.getElementById('hold').getContext('2d');
 const nextCtx = document.getElementById('next').getContext('2d');
 
-// Original palette
+// Fallback colors, shown only until a flag image has loaded
 const COLORS = {
   I: '#4dd6c4', O: '#ffd35c', T: '#b48cff', S: '#7be07b',
   Z: '#ff7a8a', J: '#6aa8ff', L: '#ffa15c'
@@ -119,7 +134,65 @@ const SHAPES = {
 };
 const LINE_POINTS = [0, 100, 300, 500, 800];
 
-let grid, piece, holdType, canHold, queue, score, lines, level;
+// ISO 3166 codes -> names. Flags come from the open-source flag-icons set.
+const COUNTRIES = Object.fromEntries(`
+af Afghanistan|al Albania|dz Algeria|ad Andorra|ao Angola|ag Antigua and Barbuda|ar Argentina|am Armenia|au Australia|at Austria|
+az Azerbaijan|bs Bahamas|bh Bahrain|bd Bangladesh|bb Barbados|by Belarus|be Belgium|bz Belize|bj Benin|bt Bhutan|
+bo Bolivia|ba Bosnia and Herzegovina|bw Botswana|br Brazil|bn Brunei|bg Bulgaria|bf Burkina Faso|bi Burundi|cv Cabo Verde|kh Cambodia|
+cm Cameroon|ca Canada|cf Central African Republic|td Chad|cl Chile|cn China|co Colombia|km Comoros|cg Congo|cd DR Congo|
+cr Costa Rica|ci Côte d'Ivoire|hr Croatia|cu Cuba|cy Cyprus|cz Czechia|dk Denmark|dj Djibouti|dm Dominica|do Dominican Republic|
+ec Ecuador|eg Egypt|sv El Salvador|gq Equatorial Guinea|er Eritrea|ee Estonia|sz Eswatini|et Ethiopia|fj Fiji|fi Finland|
+fr France|ga Gabon|gm Gambia|ge Georgia|de Germany|gh Ghana|gr Greece|gd Grenada|gt Guatemala|gn Guinea|
+gw Guinea-Bissau|gy Guyana|ht Haiti|hn Honduras|hu Hungary|is Iceland|in India|id Indonesia|ir Iran|iq Iraq|
+ie Ireland|il Israel|it Italy|jm Jamaica|jp Japan|jo Jordan|kz Kazakhstan|ke Kenya|ki Kiribati|kp North Korea|
+kr South Korea|kw Kuwait|kg Kyrgyzstan|la Laos|lv Latvia|lb Lebanon|ls Lesotho|lr Liberia|ly Libya|li Liechtenstein|
+lt Lithuania|lu Luxembourg|mg Madagascar|mw Malawi|my Malaysia|mv Maldives|ml Mali|mt Malta|mh Marshall Islands|mr Mauritania|
+mu Mauritius|mx Mexico|fm Micronesia|md Moldova|mc Monaco|mn Mongolia|me Montenegro|ma Morocco|mz Mozambique|mm Myanmar|
+na Namibia|nr Nauru|np Nepal|nl Netherlands|nz New Zealand|ni Nicaragua|ne Niger|ng Nigeria|mk North Macedonia|no Norway|
+om Oman|pk Pakistan|pw Palau|ps Palestine|pa Panama|pg Papua New Guinea|py Paraguay|pe Peru|ph Philippines|pl Poland|
+pt Portugal|qa Qatar|ro Romania|ru Russia|rw Rwanda|kn Saint Kitts and Nevis|lc Saint Lucia|vc Saint Vincent and the Grenadines|ws Samoa|sm San Marino|
+st São Tomé and Príncipe|sa Saudi Arabia|sn Senegal|rs Serbia|sc Seychelles|sl Sierra Leone|sg Singapore|sk Slovakia|si Slovenia|sb Solomon Islands|
+so Somalia|za South Africa|ss South Sudan|es Spain|lk Sri Lanka|sd Sudan|sr Suriname|se Sweden|ch Switzerland|sy Syria|
+tw Taiwan|tj Tajikistan|tz Tanzania|th Thailand|tl Timor-Leste|tg Togo|to Tonga|tt Trinidad and Tobago|tn Tunisia|tr Türkiye|
+tm Turkmenistan|tv Tuvalu|ug Uganda|ua Ukraine|ae United Arab Emirates|gb United Kingdom|us United States|uy Uruguay|uz Uzbekistan|vu Vanuatu|
+va Vatican City|ve Venezuela|vn Vietnam|ye Yemen|zm Zambia|zw Zimbabwe`
+  .split('|').map(s => s.trim()).map(s => [s.slice(0, 2), s.slice(3)]));
+const FLAG_URL = code => `https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/flags/4x3/${code}.svg`;
+
+// The source SVGs have a viewBox but no width/height, so give them explicit
+// dimensions before drawing; otherwise canvas slicing is unreliable.
+const flagImages = {};
+function loadFlag(code) {
+  if (flagImages[code]) return flagImages[code];
+  const img = new Image();
+  img.ok = false;
+  flagImages[code] = img;
+  fetch(FLAG_URL(code))
+    .then(r => r.text())
+    .then(svg => {
+      svg = svg.replace('<svg ', '<svg width="640" height="480" ');
+      img.onload = () => { img.ok = true; };
+      img.src = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+    })
+    .catch(() => {});
+  return img;
+}
+
+let countryDeck = [];
+function nextCountry() {
+  if (!countryDeck.length) {
+    countryDeck = Object.keys(COUNTRIES);
+    for (let i = countryDeck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [countryDeck[i], countryDeck[j]] = [countryDeck[j], countryDeck[i]];
+    }
+  }
+  const code = countryDeck.pop();
+  loadFlag(code);
+  return code;
+}
+
+let grid, piece, holdItem, canHold, queue, score, lines, level, flagsPlaced;
 let dropTimer, lastTime, running = false, paused = false, over = false;
 let best = 0;
 try { best = +localStorage.getItem('blockfall-best') || 0; } catch (e) {}
@@ -133,17 +206,28 @@ function refillQueue() {
     const j = Math.floor(Math.random() * (i + 1));
     [bag[i], bag[j]] = [bag[j], bag[i]];
   }
-  queue.push(...bag);
+  queue.push(...bag.map(type => ({ type, flag: nextCountry() })));
 }
 
-function spawn(type) {
-  if (!type) {
+function spawn(item) {
+  if (!item) {
     if (queue.length < 7) refillQueue();
-    type = queue.shift();
+    item = queue.shift();
   }
-  const m = SHAPES[type].map(r => r.slice());
-  piece = { type, m, x: Math.floor((COLS - m[0].length) / 2), y: type === 'I' ? -1 : 0 };
+  const m = SHAPES[item.type].map(r => r.slice());
+  piece = { type: item.type, flag: item.flag, m, x: Math.floor((COLS - m[0].length) / 2), y: item.type === 'I' ? -1 : 0 };
+  showNow(item.flag);
   if (collides(piece.m, piece.x, piece.y)) gameOver();
+}
+
+function showNow(code) {
+  const el = document.getElementById('now');
+  el.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = FLAG_URL(code);
+  img.alt = '';
+  el.append(img, document.createTextNode(COUNTRIES[code]));
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
 }
 
 function collides(m, px, py) {
@@ -194,16 +278,28 @@ function hardDrop() {
 
 function hold() {
   if (!canHold) return;
-  const t = piece.type;
-  if (holdType) spawn(holdType); else spawn();
-  holdType = t; canHold = false;
+  const cur = { type: piece.type, flag: piece.flag };
+  spawn(holdItem);
+  holdItem = cur; canHold = false;
+}
+
+// Bounding box of the filled cells, so a flag stretches across the whole piece
+function bounds(m) {
+  let x0 = 9, y0 = 9, x1 = -1, y1 = -1;
+  m.forEach((row, y) => row.forEach((v, x) => {
+    if (v) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  }));
+  return { x0, y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 
 function lock() {
+  const b = bounds(piece.m);
   piece.m.forEach((row, y) => row.forEach((v, x) => {
-    if (v && piece.y + y >= 0) grid[piece.y + y][piece.x + x] = piece.type;
+    if (v && piece.y + y >= 0)
+      grid[piece.y + y][piece.x + x] = { type: piece.type, flag: piece.flag, u: x - b.x0, v: y - b.y0, w: b.w, h: b.h };
   }));
   if (piece.m.some((row, y) => row.some(v => v) && piece.y + y < 0)) return gameOver();
+  flagsPlaced++;
   let cleared = 0;
   for (let y = ROWS - 1; y >= 0; y--) {
     if (grid[y].every(c => c)) {
@@ -228,46 +324,71 @@ function ghostY() {
   return y;
 }
 
-function drawCell(c, x, y, color, size, alpha = 1) {
+// Draw one cell: the (u, v) slice of a flag that covers a w x h block area
+function drawFlagCell(c, cell, px, py, size, alpha = 1) {
+  const img = flagImages[cell.flag];
   c.globalAlpha = alpha;
-  c.fillStyle = color;
-  c.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
-  c.fillStyle = 'rgba(255,255,255,0.25)';
-  c.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  if (img && img.ok) {
+    const scale = Math.max(cell.w / 640, cell.h / 480);
+    const cs = 1 / scale;
+    const sx = (640 - cell.w * cs) / 2 + cell.u * cs;
+    const sy = (480 - cell.h * cs) / 2 + cell.v * cs;
+    c.drawImage(img, sx, sy, cs, cs, px, py, size, size);
+  } else {
+    c.fillStyle = COLORS[cell.type];
+    c.fillRect(px, py, size, size);
+  }
+  // Bevel so each block reads as a block while the flag stays continuous
+  c.fillStyle = 'rgba(255,255,255,0.22)';
+  c.fillRect(px, py, size, Math.max(1, size * 0.08));
+  c.fillRect(px, py, Math.max(1, size * 0.08), size);
+  c.fillStyle = 'rgba(0,0,0,0.28)';
+  c.fillRect(px, py + size - Math.max(1, size * 0.08), size, Math.max(1, size * 0.08));
+  c.fillRect(px + size - Math.max(1, size * 0.08), py, Math.max(1, size * 0.08), size);
+  c.strokeStyle = 'rgba(0,0,0,0.45)';
+  c.lineWidth = 1;
+  c.strokeRect(px + 0.5, py + 0.5, size - 1, size - 1);
   c.globalAlpha = 1;
+}
+
+function drawPiece(c, m, type, flag, ox, oy, size, alpha) {
+  const b = bounds(m);
+  m.forEach((row, y) => row.forEach((v, x) => {
+    if (v && oy + y >= 0)
+      drawFlagCell(c, { type, flag, u: x - b.x0, v: y - b.y0, w: b.w, h: b.h }, (ox + x) * size, (oy + y) * size, size, alpha);
+  }));
 }
 
 function draw() {
   ctx.fillStyle = '#0a0b18';
   ctx.fillRect(0, 0, board.width, board.height);
   ctx.strokeStyle = '#161834';
+  ctx.lineWidth = 1;
   for (let x = 1; x < COLS; x++) { ctx.beginPath(); ctx.moveTo(x * SIZE, 0); ctx.lineTo(x * SIZE, ROWS * SIZE); ctx.stroke(); }
   for (let y = 1; y < ROWS; y++) { ctx.beginPath(); ctx.moveTo(0, y * SIZE); ctx.lineTo(COLS * SIZE, y * SIZE); ctx.stroke(); }
 
-  grid.forEach((row, y) => row.forEach((t, x) => { if (t) drawCell(ctx, x, y, COLORS[t], SIZE); }));
+  grid.forEach((row, y) => row.forEach((cell, x) => { if (cell) drawFlagCell(ctx, cell, x * SIZE, y * SIZE, SIZE); }));
 
   if (piece && !over) {
     const gy = ghostY();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 2;
     piece.m.forEach((row, y) => row.forEach((v, x) => {
-      if (v && gy + y >= 0) drawCell(ctx, piece.x + x, gy + y, COLORS[piece.type], SIZE, 0.2);
+      if (v && gy + y >= 0) ctx.strokeRect((piece.x + x) * SIZE + 3, (gy + y) * SIZE + 3, SIZE - 6, SIZE - 6);
     }));
-    piece.m.forEach((row, y) => row.forEach((v, x) => {
-      if (v && piece.y + y >= 0) drawCell(ctx, piece.x + x, piece.y + y, COLORS[piece.type], SIZE);
-    }));
+    drawPiece(ctx, piece.m, piece.type, piece.flag, piece.x, piece.y, SIZE, 1);
   }
-  drawPreview(holdCtx, holdType ? [holdType] : [], canHold ? 1 : 0.35);
+  drawPreview(holdCtx, holdItem ? [holdItem] : [], canHold ? 1 : 0.35);
   drawPreview(nextCtx, queue.slice(0, 3), 1);
 }
 
-function drawPreview(c, types, alpha) {
+function drawPreview(c, items, alpha) {
   c.clearRect(0, 0, c.canvas.width, c.canvas.height);
   const s = 18;
-  types.forEach((t, i) => {
-    const m = SHAPES[t];
-    const rows = m.filter(r => r.some(v => v));
-    const w = m[0].length, h = rows.length;
-    const ox = (80 - w * s) / 2 / s, oy = (i * 80 + (80 - h * s) / 2) / s;
-    rows.forEach((row, y) => row.forEach((v, x) => { if (v) drawCell(c, ox + x, oy + y, COLORS[t], s, alpha); }));
+  items.forEach((item, i) => {
+    const m = SHAPES[item.type].filter(r => r.some(v => v));
+    const ox = (80 - m[0].length * s) / 2 / s, oy = (i * 80 + (80 - m.length * s) / 2) / s;
+    drawPiece(c, m, item.type, item.flag, ox, oy, s, alpha);
   });
 }
 
@@ -275,6 +396,9 @@ function updateStats() {
   document.getElementById('score').textContent = score;
   document.getElementById('lines').textContent = lines;
   document.getElementById('level').textContent = level;
+  document.getElementById('flags').textContent = flagsPlaced;
+  document.getElementById('hold-name').textContent = holdItem ? COUNTRIES[holdItem.flag] : '';
+  document.getElementById('next-names').innerHTML = queue.slice(0, 3).map(q => COUNTRIES[q.flag]).join('<br>');
 }
 
 const overlay = document.getElementById('overlay');
@@ -292,12 +416,12 @@ function gameOver() {
     try { localStorage.setItem('blockfall-best', best); } catch (e) {}
     document.getElementById('best').textContent = best;
   }
-  showOverlay('GAME OVER', `Score: ${score}<br>Lines: ${lines}`, 'Play again');
+  showOverlay('GAME OVER', `Score: ${score}<br>Lines: ${lines}<br>Flags placed: ${flagsPlaced}`, 'Play again');
 }
 
 function start() {
   grid = emptyGrid(); queue = []; refillQueue();
-  holdType = null; canHold = true; score = 0; lines = 0; level = 1;
+  holdItem = null; canHold = true; score = 0; lines = 0; level = 1; flagsPlaced = 0;
   over = false; paused = false; running = true; dropTimer = 0; lastTime = performance.now();
   spawn(); updateStats();
   overlay.classList.add('hidden');
@@ -305,7 +429,7 @@ function start() {
 }
 
 function togglePause() {
-  if (over || !grid) return;
+  if (over || !grid || !piece) return;
   paused = !paused;
   if (paused) { running = false; showOverlay('PAUSED', 'Press P or tap Resume', 'Resume'); }
   else { overlay.classList.add('hidden'); running = true; lastTime = performance.now(); requestAnimationFrame(loop); }
@@ -332,7 +456,7 @@ function act(a) {
     case 'rotateBack': rotate(-1); break;
     case 'soft': softDrop(); updateStats(); break;
     case 'drop': hardDrop(); break;
-    case 'hold': hold(); break;
+    case 'hold': hold(); updateStats(); break;
   }
   draw();
 }
@@ -355,7 +479,7 @@ document.getElementById('start').addEventListener('click', () => {
   if (paused) togglePause(); else start();
 });
 
-grid = emptyGrid(); queue = []; holdType = null; canHold = true;
+grid = emptyGrid(); queue = []; holdItem = null; canHold = true;
 draw();
 </script>
 </body>
