@@ -9,9 +9,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #070816;
-    --glass: rgba(255, 255, 255, 0.045);
-    --glass-strong: rgba(255, 255, 255, 0.07);
+    --bg: #e9dcff;
+    --glass: rgba(24, 20, 58, 0.62);
+    --glass-strong: rgba(24, 20, 58, 0.72);
     --edge: rgba(255, 255, 255, 0.09);
     --text: #eef0ff;
     --muted: #8f93c2;
@@ -24,8 +24,9 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; }
+  html { background: var(--bg); }
   body {
-    background: var(--bg);
+    background: linear-gradient(160deg, #d9ccff 0%, #f6c6e0 45%, #ffdcc2 100%) fixed;
     color: var(--text);
     font-family: "Outfit", system-ui, -apple-system, sans-serif;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -33,33 +34,41 @@
   }
 
   /* Ambient background */
-  .aurora { position: fixed; inset: -20%; z-index: -2; filter: blur(80px); opacity: 0.55; }
-  .aurora span { position: absolute; border-radius: 50%; animation: drift 24s ease-in-out infinite alternate; }
-  .aurora span:nth-child(1) { width: 45vmax; height: 45vmax; left: 5%; top: 0%; background: #3b1d8f; }
-  .aurora span:nth-child(2) { width: 40vmax; height: 40vmax; right: 0%; top: 20%; background: #0d4f7a; animation-duration: 30s; }
-  .aurora span:nth-child(3) { width: 35vmax; height: 35vmax; left: 30%; bottom: -5%; background: #7a1d5c; animation-duration: 36s; }
+  .aurora { position: fixed; inset: -20%; z-index: -3; filter: blur(90px); opacity: 0.75; }
+  .aurora span { position: absolute; border-radius: 50%; animation: drift 26s ease-in-out infinite alternate; }
+  .aurora span:nth-child(1) { width: 45vmax; height: 45vmax; left: 0%; top: 0%; background: #a5b4fc; }
+  .aurora span:nth-child(2) { width: 40vmax; height: 40vmax; right: 0%; top: 15%; background: #f9a8d4; animation-duration: 32s; }
+  .aurora span:nth-child(3) { width: 38vmax; height: 38vmax; left: 25%; bottom: -8%; background: #fed7aa; animation-duration: 38s; }
+  .aurora span:nth-child(4) { width: 30vmax; height: 30vmax; right: 20%; bottom: 10%; background: #99f6e4; opacity: 0.7; animation-duration: 44s; animation-direction: alternate-reverse; }
   @keyframes drift { to { transform: translate(8vmax, 6vmax) scale(1.15); } }
-  .stars {
-    position: fixed; inset: 0; z-index: -1; opacity: 0.5;
-    background-image:
-      radial-gradient(1px 1px at 12% 18%, #fff, transparent),
-      radial-gradient(1px 1px at 72% 12%, #fff, transparent),
-      radial-gradient(1px 1px at 38% 64%, #fff, transparent),
-      radial-gradient(1.5px 1.5px at 88% 52%, #fff, transparent),
-      radial-gradient(1px 1px at 22% 86%, #fff, transparent),
-      radial-gradient(1px 1px at 58% 32%, #fff, transparent),
-      radial-gradient(1.5px 1.5px at 8% 48%, #fff, transparent),
-      radial-gradient(1px 1px at 94% 88%, #fff, transparent);
+  /* Soft floating light orbs */
+  .stars { position: fixed; inset: 0; z-index: -2; overflow: hidden; pointer-events: none; }
+  .stars i {
+    position: absolute; bottom: -40px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,255,255,0.95), rgba(255,255,255,0) 70%);
+    animation: float linear infinite;
+  }
+  @keyframes float {
+    0% { transform: translateY(0) translateX(0); opacity: 0; }
+    10% { opacity: 0.9; }
+    50% { transform: translateY(-55vh) translateX(20px); }
+    90% { opacity: 0.7; }
+    100% { transform: translateY(-110vh) translateX(-10px); opacity: 0; }
+  }
+  /* Fine film grain for texture */
+  .grain {
+    position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.18; mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
   header { text-align: center; margin-bottom: 14px; }
   h1 {
     margin: 0; font-size: 34px; font-weight: 800; letter-spacing: 6px;
-    background: linear-gradient(90deg, var(--gold), var(--coral), var(--pink));
+    background: linear-gradient(90deg, #ff7a2f, #ff4f7b, #9b5cff);
     -webkit-background-clip: text; background-clip: text; color: transparent;
-    filter: drop-shadow(0 4px 24px rgba(255, 122, 89, 0.35));
+    filter: drop-shadow(0 2px 0 rgba(255, 255, 255, 0.6)) drop-shadow(0 6px 20px rgba(155, 92, 255, 0.35));
   }
-  .tagline { margin: 2px 0 0; font-size: 11px; font-weight: 600; letter-spacing: 4px; color: var(--muted); }
+  .tagline { margin: 2px 0 0; font-size: 11px; font-weight: 600; letter-spacing: 4px; color: rgba(55, 35, 110, 0.65); }
 
   .game { display: flex; gap: 20px; align-items: flex-start; }
   .side { display: flex; flex-direction: column; gap: 12px; width: var(--side); }
@@ -195,8 +204,9 @@
 </style>
 </head>
 <body>
-<div class="aurora"><span></span><span></span><span></span></div>
-<div class="stars"></div>
+<div class="aurora"><span></span><span></span><span></span><span></span></div>
+<div class="stars" id="orbs"></div>
+<div class="grain"></div>
 
 <header>
   <h1>BLOCKFALL</h1>
@@ -424,6 +434,8 @@ function layout() {
   const availH = innerHeight - (mobile ? 290 : 240);
   cell = Math.max(14, Math.min(34, Math.floor(Math.min(availW / COLS, availH / ROWS))));
   ctx = setupCanvas(boardCv, cell * COLS, cell * ROWS);
+  // Keep the center column (prompt, input) exactly as wide as the board frame
+  document.querySelector('.center').style.width = (cell * COLS + 12) + 'px';
   previewW = mobile ? 60 : 120;
   holdCtx = setupCanvas(holdCv, previewW, previewW * 0.7);
   nextCtx = setupCanvas(nextCv, previewW, previewW * 0.7 * 3);
@@ -1098,6 +1110,15 @@ document.getElementById('start').addEventListener('click', () => {
 
 if (!SR) document.getElementById('ov-note').textContent =
   "This browser can't do voice input; type the country instead. Chrome, Edge and Safari support voice.";
+
+// Background light orbs
+for (let i = 0; i < 18; i++) {
+  const o = document.createElement('i');
+  const size = 6 + Math.random() * 22;
+  o.style.cssText = `left:${Math.random() * 100}%;width:${size}px;height:${size}px;` +
+    `animation-duration:${18 + Math.random() * 22}s;animation-delay:${-Math.random() * 40}s`;
+  document.getElementById('orbs').append(o);
+}
 
 grid = emptyGrid(); queue = []; holdItem = null; canHold = true;
 layout();
