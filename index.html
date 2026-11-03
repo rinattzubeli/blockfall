@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Blockfall</title>
+<style>
+  :root {
+    --bg: #0f1020;
+    --panel: #1a1b33;
+    --line: #2a2c50;
+    --text: #e8e9ff;
+    --muted: #8a8cb8;
+    --accent: #ffb547;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(circle at 50% 0%, #1d1f45, var(--bg) 70%);
+    color: var(--text);
+    font-family: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 16px; touch-action: manipulation; user-select: none;
+  }
+  h1 { margin: 0 0 12px; font-size: 28px; letter-spacing: 4px; color: var(--accent); }
+  .game { display: flex; gap: 16px; align-items: flex-start; }
+  .side { display: flex; flex-direction: column; gap: 12px; width: 110px; }
+  .box {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px; text-align: center;
+  }
+  .box .label { font-size: 11px; letter-spacing: 2px; color: var(--muted); margin-bottom: 6px; }
+  .box .value { font-size: 20px; font-weight: 700; }
+  #board {
+    background: #0a0b18; border: 2px solid var(--line); border-radius: 8px;
+    display: block; max-height: 75vh; width: auto; height: min(75vh, 600px);
+  }
+  .wrap { position: relative; }
+  #overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px; text-align: center;
+    background: rgba(10, 11, 24, 0.85); border-radius: 8px; padding: 16px;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h2 { margin: 0; font-size: 26px; color: var(--accent); }
+  #overlay p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+  button {
+    background: var(--accent); color: #1a1200; border: 0; border-radius: 8px;
+    padding: 10px 20px; font: inherit; font-weight: 700; cursor: pointer;
+  }
+  .keys { font-size: 12px; color: var(--muted); line-height: 1.7; text-align: left; }
+  .keys b { color: var(--text); font-weight: 600; }
+  .touch { display: none; gap: 8px; margin-top: 12px; flex-wrap: wrap; justify-content: center; }
+  .touch button { width: 56px; height: 56px; padding: 0; font-size: 20px; background: var(--panel); color: var(--text); border: 1px solid var(--line); }
+  @media (max-width: 640px), (pointer: coarse) {
+    .touch { display: flex; }
+    .keys-box { display: none; }
+    .side { width: 80px; }
+    .game { gap: 8px; }
+    #board { height: min(60vh, 520px); }
+  }
+</style>
+</head>
+<body>
+<h1>BLOCKFALL</h1>
+<div class="game">
+  <div class="side">
+    <div class="box"><div class="label">HOLD</div><canvas id="hold" width="80" height="80"></canvas></div>
+    <div class="box"><div class="label">SCORE</div><div class="value" id="score">0</div></div>
+    <div class="box"><div class="label">LINES</div><div class="value" id="lines">0</div></div>
+    <div class="box"><div class="label">LEVEL</div><div class="value" id="level">1</div></div>
+  </div>
+  <div class="wrap">
+    <canvas id="board" width="300" height="600"></canvas>
+    <div id="overlay">
+      <h2 id="ov-title">BLOCKFALL</h2>
+      <p id="ov-text">Stack the blocks. Clear the rows.</p>
+      <button id="start">Play</button>
+    </div>
+  </div>
+  <div class="side">
+    <div class="box"><div class="label">NEXT</div><canvas id="next" width="80" height="240"></canvas></div>
+    <div class="box"><div class="label">BEST</div><div class="value" id="best">0</div></div>
+    <div class="box keys-box"><div class="keys">
+      <b>← →</b> move<br><b>↑ / X</b> rotate<br><b>Z</b> rotate back<br>
+      <b>↓</b> soft drop<br><b>Space</b> hard drop<br><b>C</b> hold<br><b>P</b> pause
+    </div></div>
+  </div>
+</div>
+<div class="touch">
+  <button data-act="left">◀</button>
+  <button data-act="rotate">⟳</button>
+  <button data-act="right">▶</button>
+  <button data-act="soft">▼</button>
+  <button data-act="drop">⤓</button>
+  <button data-act="hold">H</button>
+</div>
+
+<script>
+const COLS = 10, ROWS = 20, SIZE = 30;
+const board = document.getElementById('board');
+const ctx = board.getContext('2d');
+const holdCtx = document.getElementById('hold').getContext('2d');
+const nextCtx = document.getElementById('next').getContext('2d');
+
+// Original palette
+const COLORS = {
+  I: '#4dd6c4', O: '#ffd35c', T: '#b48cff', S: '#7be07b',
+  Z: '#ff7a8a', J: '#6aa8ff', L: '#ffa15c'
+};
+const SHAPES = {
+  I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+  O: [[1,1],[1,1]],
+  T: [[0,1,0],[1,1,1],[0,0,0]],
+  S: [[0,1,1],[1,1,0],[0,0,0]],
+  Z: [[1,1,0],[0,1,1],[0,0,0]],
+  J: [[1,0,0],[1,1,1],[0,0,0]],
+  L: [[0,0,1],[1,1,1],[0,0,0]]
+};
+const LINE_POINTS = [0, 100, 300, 500, 800];
+
+let grid, piece, holdType, canHold, queue, score, lines, level;
+let dropTimer, lastTime, running = false, paused = false, over = false;
+let best = 0;
+try { best = +localStorage.getItem('blockfall-best') || 0; } catch (e) {}
+document.getElementById('best').textContent = best;
+
+function emptyGrid() { return Array.from({ length: ROWS }, () => Array(COLS).fill(null)); }
+
+function refillQueue() {
+  const bag = Object.keys(SHAPES);
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [bag[i], bag[j]] = [bag[j], bag[i]];
+  }
+  queue.push(...bag);
+}
+
+function spawn(type) {
+  if (!type) {
+    if (queue.length < 7) refillQueue();
+    type = queue.shift();
+  }
+  const m = SHAPES[type].map(r => r.slice());
+  piece = { type, m, x: Math.floor((COLS - m[0].length) / 2), y: type === 'I' ? -1 : 0 };
+  if (collides(piece.m, piece.x, piece.y)) gameOver();
+}
+
+function collides(m, px, py) {
+  for (let y = 0; y < m.length; y++)
+    for (let x = 0; x < m[y].length; x++) {
+      if (!m[y][x]) continue;
+      const gx = px + x, gy = py + y;
+      if (gx < 0 || gx >= COLS || gy >= ROWS) return true;
+      if (gy >= 0 && grid[gy][gx]) return true;
+    }
+  return false;
+}
+
+function rotated(m, dir) {
+  const n = m.length;
+  const r = Array.from({ length: n }, () => Array(n).fill(0));
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++)
+      if (dir > 0) r[x][n - 1 - y] = m[y][x];
+      else r[n - 1 - x][y] = m[y][x];
+  return r;
+}
+
+function rotate(dir) {
+  if (piece.type === 'O') return;
+  const m = rotated(piece.m, dir);
+  for (const [dx, dy] of [[0,0],[-1,0],[1,0],[0,-1],[-2,0],[2,0],[-1,-1],[1,-1]]) {
+    if (!collides(m, piece.x + dx, piece.y + dy)) {
+      piece.m = m; piece.x += dx; piece.y += dy; return;
+    }
+  }
+}
+
+function move(dx) { if (!collides(piece.m, piece.x + dx, piece.y)) piece.x += dx; }
+
+function softDrop() {
+  if (!collides(piece.m, piece.x, piece.y + 1)) { piece.y++; score += 1; }
+  else lock();
+  dropTimer = 0;
+}
+
+function hardDrop() {
+  let d = 0;
+  while (!collides(piece.m, piece.x, piece.y + 1)) { piece.y++; d++; }
+  score += d * 2;
+  lock();
+}
+
+function hold() {
+  if (!canHold) return;
+  const t = piece.type;
+  if (holdType) spawn(holdType); else spawn();
+  holdType = t; canHold = false;
+}
+
+function lock() {
+  piece.m.forEach((row, y) => row.forEach((v, x) => {
+    if (v && piece.y + y >= 0) grid[piece.y + y][piece.x + x] = piece.type;
+  }));
+  if (piece.m.some((row, y) => row.some(v => v) && piece.y + y < 0)) return gameOver();
+  let cleared = 0;
+  for (let y = ROWS - 1; y >= 0; y--) {
+    if (grid[y].every(c => c)) {
+      grid.splice(y, 1); grid.unshift(Array(COLS).fill(null)); cleared++; y++;
+    }
+  }
+  if (cleared) {
+    score += LINE_POINTS[cleared] * level;
+    lines += cleared;
+    level = Math.floor(lines / 10) + 1;
+  }
+  canHold = true;
+  spawn();
+  updateStats();
+}
+
+function dropInterval() { return Math.max(60, 800 * Math.pow(0.85, level - 1)); }
+
+function ghostY() {
+  let y = piece.y;
+  while (!collides(piece.m, piece.x, y + 1)) y++;
+  return y;
+}
+
+function drawCell(c, x, y, color, size, alpha = 1) {
+  c.globalAlpha = alpha;
+  c.fillStyle = color;
+  c.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
+  c.fillStyle = 'rgba(255,255,255,0.25)';
+  c.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  c.globalAlpha = 1;
+}
+
+function draw() {
+  ctx.fillStyle = '#0a0b18';
+  ctx.fillRect(0, 0, board.width, board.height);
+  ctx.strokeStyle = '#161834';
+  for (let x = 1; x < COLS; x++) { ctx.beginPath(); ctx.moveTo(x * SIZE, 0); ctx.lineTo(x * SIZE, ROWS * SIZE); ctx.stroke(); }
+  for (let y = 1; y < ROWS; y++) { ctx.beginPath(); ctx.moveTo(0, y * SIZE); ctx.lineTo(COLS * SIZE, y * SIZE); ctx.stroke(); }
+
+  grid.forEach((row, y) => row.forEach((t, x) => { if (t) drawCell(ctx, x, y, COLORS[t], SIZE); }));
+
+  if (piece && !over) {
+    const gy = ghostY();
+    piece.m.forEach((row, y) => row.forEach((v, x) => {
+      if (v && gy + y >= 0) drawCell(ctx, piece.x + x, gy + y, COLORS[piece.type], SIZE, 0.2);
+    }));
+    piece.m.forEach((row, y) => row.forEach((v, x) => {
+      if (v && piece.y + y >= 0) drawCell(ctx, piece.x + x, piece.y + y, COLORS[piece.type], SIZE);
+    }));
+  }
+  drawPreview(holdCtx, holdType ? [holdType] : [], canHold ? 1 : 0.35);
+  drawPreview(nextCtx, queue.slice(0, 3), 1);
+}
+
+function drawPreview(c, types, alpha) {
+  c.clearRect(0, 0, c.canvas.width, c.canvas.height);
+  const s = 18;
+  types.forEach((t, i) => {
+    const m = SHAPES[t];
+    const rows = m.filter(r => r.some(v => v));
+    const w = m[0].length, h = rows.length;
+    const ox = (80 - w * s) / 2 / s, oy = (i * 80 + (80 - h * s) / 2) / s;
+    rows.forEach((row, y) => row.forEach((v, x) => { if (v) drawCell(c, ox + x, oy + y, COLORS[t], s, alpha); }));
+  });
+}
+
+function updateStats() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('lines').textContent = lines;
+  document.getElementById('level').textContent = level;
+}
+
+const overlay = document.getElementById('overlay');
+function showOverlay(title, text, btn) {
+  document.getElementById('ov-title').textContent = title;
+  document.getElementById('ov-text').innerHTML = text;
+  document.getElementById('start').textContent = btn;
+  overlay.classList.remove('hidden');
+}
+
+function gameOver() {
+  over = true; running = false;
+  if (score > best) {
+    best = score;
+    try { localStorage.setItem('blockfall-best', best); } catch (e) {}
+    document.getElementById('best').textContent = best;
+  }
+  showOverlay('GAME OVER', `Score: ${score}<br>Lines: ${lines}`, 'Play again');
+}
+
+function start() {
+  grid = emptyGrid(); queue = []; refillQueue();
+  holdType = null; canHold = true; score = 0; lines = 0; level = 1;
+  over = false; paused = false; running = true; dropTimer = 0; lastTime = performance.now();
+  spawn(); updateStats();
+  overlay.classList.add('hidden');
+  requestAnimationFrame(loop);
+}
+
+function togglePause() {
+  if (over || !grid) return;
+  paused = !paused;
+  if (paused) { running = false; showOverlay('PAUSED', 'Press P or tap Resume', 'Resume'); }
+  else { overlay.classList.add('hidden'); running = true; lastTime = performance.now(); requestAnimationFrame(loop); }
+}
+
+function loop(t) {
+  if (!running) return;
+  dropTimer += t - lastTime; lastTime = t;
+  if (dropTimer > dropInterval()) {
+    if (!collides(piece.m, piece.x, piece.y + 1)) piece.y++;
+    else lock();
+    dropTimer = 0;
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function act(a) {
+  if (!running) return;
+  switch (a) {
+    case 'left': move(-1); break;
+    case 'right': move(1); break;
+    case 'rotate': rotate(1); break;
+    case 'rotateBack': rotate(-1); break;
+    case 'soft': softDrop(); updateStats(); break;
+    case 'drop': hardDrop(); break;
+    case 'hold': hold(); break;
+  }
+  draw();
+}
+
+document.addEventListener('keydown', e => {
+  const map = {
+    ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'rotate', KeyX: 'rotate',
+    KeyZ: 'rotateBack', ArrowDown: 'soft', Space: 'drop', KeyC: 'hold', ShiftLeft: 'hold'
+  };
+  if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); return; }
+  if (e.code === 'Enter' && !running && !paused) { start(); return; }
+  if (map[e.code]) { e.preventDefault(); act(map[e.code]); }
+});
+
+document.querySelectorAll('.touch button').forEach(b => {
+  b.addEventListener('pointerdown', e => { e.preventDefault(); act(b.dataset.act); });
+});
+
+document.getElementById('start').addEventListener('click', () => {
+  if (paused) togglePause(); else start();
+});
+
+grid = emptyGrid(); queue = []; holdType = null; canHold = true;
+draw();
+</script>
+</body>
+</html>
